@@ -311,16 +311,33 @@ class DPQuantilesTest(absltest.TestCase):
   def test_calibrate_and_call(self):
     mech = primitives.DPQuantiles(lower=0.0, upper=10.0, num_partitions=4)
     calibrated = mech.calibrate(zcdp_rho=100.0)
+    self.assertIsNotNone(calibrated.epsilon_levels)
+    self.assertLen(calibrated.epsilon_levels, 2)
     data = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])
     result = calibrated(self.rng, data)
     self.assertLen(result, 3)
 
-  def test_direct_zcdp_rho(self):
+  def test_direct_epsilon_levels(self):
     mech = primitives.DPQuantiles(
-        lower=0.0, upper=10.0, num_partitions=4, zcdp_rho=100.0
+        lower=0.0, upper=10.0, num_partitions=4, epsilon_levels=[10.0, 20.0]
     )
     result = mech(self.rng, np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]))
     self.assertLen(result, 3)
+
+  def test_calibrate_default_ratio(self):
+    mech = primitives.DPQuantiles(lower=0.0, upper=10.0, num_partitions=4)
+    calibrated = mech.calibrate(zcdp_rho=1.0)
+    # Default ratio=2 means deeper level gets 4x the rho budget.
+    eps = np.array(calibrated.epsilon_levels)
+    # eps[0] is deepest, eps[1] is shallowest. eps[0] / eps[1] should be 2.
+    np.testing.assert_allclose(eps[0] / eps[1], 2.0)
+
+  def test_calibrate_custom_ratio(self):
+    mech = primitives.DPQuantiles(lower=0.0, upper=10.0, num_partitions=4)
+    calibrated = mech.calibrate(zcdp_rho=1.0, epsilon_ratio=1.0)
+    # Ratio=1 means uniform epsilon across levels.
+    eps = np.array(calibrated.epsilon_levels)
+    np.testing.assert_allclose(eps[0], eps[1])
 
   def test_dp_event_raises_before_calibration(self):
     mech = primitives.DPQuantiles(lower=0.0, upper=10.0, num_partitions=4)

@@ -21,6 +21,7 @@ operations for efficiency in single-machine environments.
 from __future__ import annotations
 
 import abc
+from collections.abc import Sequence
 import dataclasses
 import math
 from typing import Any
@@ -158,21 +159,27 @@ def _median(
   return rng.uniform(v_min, v_max)
 
 
-def _quantile_epsilon_levels(zcdp_rho: float, num_levels: int) -> np.ndarray:
+def _quantile_epsilon_levels(
+    zcdp_rho: float, num_levels: int, epsilon_ratio: float = 2.0
+) -> np.ndarray:
   """Computes per-level exponential mechanism epsilons for DP quantiles.
 
   At each level of the recursive bisection, each data point participates in
   exactly one median computation (parallel composition), so the privacy cost
   at each level is that of a single exponential mechanism invocation.  Deeper
   levels operate on half the data of the level above, halving the signal.  To
-  keep the noise proportional to the signal, we double epsilon at each deeper
-  level.  Since rho = epsilon^2 / 8 for the exponential mechanism under zCDP,
-  doubling epsilon quadruples rho, giving rho_i = 4 * rho_{i+1}.
+  keep the noise proportional to the signal, epsilon grows by a factor of
+  ``epsilon_ratio`` at each deeper level.  Since rho = epsilon^2 / 8 for the
+  exponential mechanism under zCDP, scaling epsilon by ``epsilon_ratio``
+  scales rho by ``epsilon_ratio**2``.
 
   Args:
     zcdp_rho: Total zCDP privacy budget.
     num_levels: Number of levels in the quantile tree. Number of buckets is ``2
       ** num_levels``.
+    epsilon_ratio: Factor by which epsilon grows at each deeper level. A value
+      of 2 means epsilon doubles per level (noise halves), preserving the
+      signal-to-noise ratio as data is split.
 
   Returns:
     A length ``num_levels`` array of per-level epsilons, ordered from the
@@ -180,7 +187,9 @@ def _quantile_epsilon_levels(zcdp_rho: float, num_levels: int) -> np.ndarray:
   """
   if num_levels == 0:
     return np.array([])
-  budget_weights = 4 ** np.arange(num_levels)[::-1]
+  # Since rho = eps^2 / 8, scaling epsilon by r scales rho by r^2.
+  rho_ratio = epsilon_ratio**2
+  budget_weights = rho_ratio ** np.arange(num_levels)[::-1]
   rho_levels = zcdp_rho * budget_weights / budget_weights.sum()
   return np.sqrt(8 * rho_levels)
 
@@ -453,20 +462,22 @@ class DPQuantiles(DPMechanism):
   """Differentially private quantiles via composed exponential mechanisms.
 
   This is a ``log2(num_partitions)``-level composition of the exponential
-  mechanism. The natural privacy parameter is ``zcdp_rho`` (the total zCDP
-  budget) since the mechanism internally splits it across levels.
+  mechanism. The natural privacy parameters are per-level epsilon values
+  controlling each exponential mechanism invocation in the recursive bisection.
 
   Attributes:
     lower: Lower bound for the data domain.
     upper: Upper bound for the data domain.
     num_partitions: Number of partitions (must be a power of 2).
-    zcdp_rho: Total zCDP budget. Set directly or via ``calibrate``.
+    epsilon_levels: Per-level exponential mechanism epsilons, ordered from the
+      deepest (finest) level to the shallowest (coarsest). Length must equal
+      ``log2(num_partitions)``. Set directly or via ``calibrate``.
   """
 
   lower: float
   upper: float
   num_partitions: int
-  zcdp_rho: float | None = None
+  epsilon_levels: Sequence[float] | None = None
 
   @property
   def _num_levels(self) -> int:
@@ -475,27 +486,44 @@ class DPQuantiles(DPMechanism):
       raise ValueError(f'{self.num_partitions=} must be a power of 2.')
     return result
 
-  def calibrate(self, *, zcdp_rho: float) -> DPQuantiles:
-    """Returns a copy calibrated to the given zCDP budget."""
-    return dataclasses.replace(self, zcdp_rho=zcdp_rho)
+  def calibrate(
+      self, *, zcdp_rho: float, epsilon_ratio: float = 2.0
+  ) -> DPQuantiles:
+    """Returns a copy calibrated to the given zCDP budget.
+
+    Converts the zCDP budget into per-level epsilon values using the given
+    ``epsilon_ratio`` to control how aggressively the budget is shifted
+    toward deeper (finer) levels of the quantile tree.
+
+    Args:
+      zcdp_rho: The zCDP privacy budget (rho).
+      epsilon_ratio: Factor by which epsilon grows at each deeper level. A value
+        of 2 (default) means epsilon doubles per level, preserving the
+        signal-to-noise ratio as data is halved at each split.
+
+    Returns:
+      A new DPQuantiles instance with ``epsilon_levels`` set.
+    """
+    eps = _quantile_epsilon_levels(zcdp_rho, self._num_levels, epsilon_ratio)
+    return dataclasses.replace(self, epsilon_levels=tuple(eps.tolist()))
 
   @property
   def dp_event(self) -> dp_accounting.DpEvent:
     """Returns the composed privacy event for this mechanism."""
-    if self.zcdp_rho is None:
-      raise ValueError(_UNCALIBRATED_MSG.format(param='zcdp_rho'))
-    eps_levels = _quantile_epsilon_levels(self.zcdp_rho, self._num_levels)
+    if self.epsilon_levels is None:
+      raise ValueError(_UNCALIBRATED_MSG.format(param='epsilon_levels'))
     return dp_accounting.ComposedDpEvent([
         dp_accounting.ExponentialMechanismDpEvent(epsilon=float(eps))
-        for eps in eps_levels
+        for eps in self.epsilon_levels
     ])
 
   def __call__(self, rng: np.random.Generator, data: np.ndarray) -> list[float]:
     """Computes differentially private quantiles."""
-    if self.zcdp_rho is None:
-      raise ValueError(_UNCALIBRATED_MSG.format(param='zcdp_rho'))
-    eps_levels = _quantile_epsilon_levels(self.zcdp_rho, self._num_levels)
-    return _quantiles(rng, data, self.lower, self.upper, eps_levels)
+    if self.epsilon_levels is None:
+      raise ValueError(_UNCALIBRATED_MSG.format(param='epsilon_levels'))
+    return _quantiles(
+        rng, data, self.lower, self.upper, np.asarray(self.epsilon_levels)
+    )
 
 
 @dataclasses.dataclass
