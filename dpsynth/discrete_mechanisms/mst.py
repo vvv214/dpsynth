@@ -199,10 +199,12 @@ def run_mechanism(
   np.random.seed(config.seed)
   if initial_measurements is None:
     budget_remaining -= config.one_way_budget_fraction * zcdp_rho
+    one_way_rho = zcdp_rho * config.one_way_budget_fraction
+    one_way_sigma = accounting.zcdp_gaussian_sigma(one_way_rho)
     one_way_measurements = common.measure_marginals_with_noise(
         data,
         marginal_queries=[(a,) for a in data.domain],
-        gdp_sigma=zcdp_rho * config.one_way_budget_fraction,
+        gdp_sigma=one_way_sigma,
     )
   else:
     one_way_measurements = initial_measurements
