@@ -532,3 +532,55 @@ class DPGaussianHistogram(DPMechanism):
     if self.sigma is None:
       raise ValueError(_UNCALIBRATED_MSG.format(param='sigma'))
     return _gaussian_histogram(rng, data, self.domain_size, self.sigma)
+
+
+@dataclasses.dataclass
+class DPPartitionSelection(DPMechanism):
+  """Differentially private partition selection via Gaussian Thresholding.
+
+  Wraps :func:`select_partitions_gaussian_thresholding` as a ``DPMechanism``.
+  The natural privacy parameter is ``sigma`` (Gaussian noise std dev).
+
+  Because partition selection is an approximate (delta > 0) mechanism, the
+  ``dp_event`` wraps the inner Gaussian event in an ``ApproximateDpEvent``.
+
+  Attributes:
+    delta: Failure probability for the thresholding step.
+    sigma: Gaussian noise standard deviation. Set directly or via ``calibrate``.
+  """
+
+  delta: float
+  sigma: float | None = None
+
+  def calibrate(self, *, zcdp_rho: float) -> DPPartitionSelection:
+    """Returns a copy with sigma derived from the zCDP budget."""
+    return dataclasses.replace(self, sigma=math.sqrt(0.5 / zcdp_rho))
+
+  @property
+  def dp_event(self) -> dp_accounting.DpEvent:
+    """Returns the privacy event including thresholding delta."""
+    if self.sigma is None:
+      raise ValueError(_UNCALIBRATED_MSG.format(param='sigma'))
+    return dp_accounting.ApproximateDpEvent(
+        event=dp_accounting.GaussianDpEvent(noise_multiplier=self.sigma),
+        delta=self.delta,
+    )
+
+  def __call__(
+      self, rng: np.random.Generator, data: np.ndarray
+  ) -> tuple[np.ndarray, np.ndarray, float]:
+    """Runs partition selection on integer-encoded partition IDs.
+
+    Args:
+      rng: A numpy random number generator.
+      data: 1D array of integer partition IDs.
+
+    Returns:
+      A tuple of (selected_partitions, noisy_counts, sigma).
+    """
+    if self.sigma is None:
+      raise ValueError(_UNCALIBRATED_MSG.format(param='sigma'))
+    gdp_budget = np.inf if self.sigma == 0.0 else 1.0 / (self.sigma**2)
+    return select_partitions_gaussian_thresholding(
+        rng, data, gdp_budget, self.delta
+    )
