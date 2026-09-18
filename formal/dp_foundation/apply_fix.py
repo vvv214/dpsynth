@@ -294,4 +294,22 @@ replace_once(
        hist[0] == 1"""
 )
 
+replace_once(
+"""    forall i: nat | i < |left|
+      ensures
+""",
+"""    forall i: nat {:trigger} | i < |left|
+      ensures
+"""
+)
+
+replace_once(
+"""    ensures ok ==> accepted == |costs| ||
+      !LeRat(AddRat(used, costs[accepted]), budget)
+""",
+"""    ensures ok ==> (accepted == |costs| ||
+      !LeRat(AddRat(used, costs[accepted]), budget))
+"""
+)
+
 path.write_text(text, encoding="utf-8")
