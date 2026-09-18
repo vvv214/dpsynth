@@ -3,7 +3,9 @@ from pathlib import Path
 path = Path("formal/dp_foundation/FoundationPilot.dfy")
 text = path.read_text(encoding="utf-8")
 
-if "lemma ValidRowsElement(" in text and "method CheckedSpendUntilBudget(" in text:
+if ("lemma ValidRowsElement(" in text and
+    "method CheckedSpendUntilBudget(" in text and
+    "function AtOrZero(" in text):
     print("proof fixes already applied")
     raise SystemExit(0)
 
@@ -94,6 +96,35 @@ replace_once(
   }
 
   lemma VecAddZeroRight"""
+)
+
+replace_once(
+"""  function VecAdd(left: seq<nat>, right: seq<nat>): (result: seq<nat>)
+    requires |left| == |right|
+    ensures |result| == |left|
+  {
+    seq(
+      |left|,
+      i => left[i] +
+        (if i < |right| then right[i] else 0)
+    )
+  }
+""",
+"""  function AtOrZero(values: seq<nat>, i: int): nat
+  {
+    if 0 <= i < |values| then values[i] else 0
+  }
+
+  function VecAdd(left: seq<nat>, right: seq<nat>): (result: seq<nat>)
+    requires |left| == |right|
+    ensures |result| == |left|
+  {
+    seq(
+      |left|,
+      i => AtOrZero(left, i) + AtOrZero(right, i)
+    )
+  }
+"""
 )
 
 replace_once(
