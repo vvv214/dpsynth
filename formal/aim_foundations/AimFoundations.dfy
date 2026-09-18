@@ -9,7 +9,7 @@ module AimFoundations {
       records[i].a < aCard && records[i].b < bCard
   }
 
-  function CountPair(records: seq<Rec>, x: nat, y: nat): nat
+  function CountPair(records: seq<Rec>, x: int, y: int): nat
     decreases |records|
   {
     if |records| == 0 then 0
@@ -23,13 +23,12 @@ module AimFoundations {
     records: seq<Rec>, aCard: nat, bCard: nat
   ): seq<seq<nat>>
   {
-    seq(aCard, x: int requires 0 <= x < aCard =>
-      seq(bCard, y: int requires 0 <= y < bCard =>
-        CountPair(records, x as nat, y as nat)))
+    seq(aCard, x =>
+      seq(bCard, y => CountPair(records, x, y)))
   }
 
   lemma CountPairAppend(
-    records: seq<Rec>, r: Rec, x: nat, y: nat
+    records: seq<Rec>, r: Rec, x: int, y: int
   )
     ensures CountPair(records + [r], x, y) ==
       CountPair(records, x, y) +
@@ -50,8 +49,7 @@ module AimFoundations {
       x < aCard && y < bCard ==>
         hist[x][y] == CountPair(records, x, y)
   {
-    hist := seq(aCard, x: int requires 0 <= x < aCard =>
-      seq(bCard, y: int requires 0 <= y < bCard => 0));
+    hist := seq(aCard, x => seq(bCard, y => 0));
 
     var i: nat := 0;
     while i < |records|
@@ -93,6 +91,7 @@ module AimFoundations {
       i := i + 1;
     }
 
+    assert i == |records|;
     assert records[..i] == records;
   }
 
