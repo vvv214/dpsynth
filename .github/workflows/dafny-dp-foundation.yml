@@ -1,0 +1,74 @@
+name: Dafny DP foundation pilot
+
+on:
+  push:
+    branches:
+      - experiment/dafny-dp-foundation
+  workflow_dispatch:
+
+jobs:
+  verify-translate-run:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check out experiment branch
+        uses: actions/checkout@v4
+
+      - name: Install Dafny 4.11.0
+        uses: dafny-lang/setup-dafny-action@v1
+        with:
+          dafny-version: "4.11.0"
+
+      - name: Record tool versions
+        run: |
+          set -euxo pipefail
+          mkdir -p formal/dp_foundation/artifacts
+          dafny --version | tee formal/dp_foundation/artifacts/dafny-version.txt
+          python3 --version 2>&1 | tee formal/dp_foundation/artifacts/python-version.txt
+
+      - name: Verify foundation proof
+        run: |
+          set -o pipefail
+          dafny verify formal/dp_foundation/FoundationPilot.dfy \
+            | tee formal/dp_foundation/artifacts/verify.log
+
+      - name: Translate verified program to Python
+        run: |
+          set -euxo pipefail
+          dafny translate py \
+            formal/dp_foundation/FoundationPilot.dfy \
+            --output=formal/dp_foundation/artifacts/dp_foundation \
+            --include-runtime \
+            | tee formal/dp_foundation/artifacts/translate.log
+          find formal/dp_foundation/artifacts/dp_foundation-py \
+            -maxdepth 3 -type f -print | sort \
+            | tee formal/dp_foundation/artifacts/generated-files.txt
+
+      - name: Execute generated Python
+        run: |
+          set -euxo pipefail
+          python3 formal/dp_foundation/artifacts/dp_foundation-py/ \
+            | tee formal/dp_foundation/artifacts/python-run.log
+          grep -F "DP_FOUNDATION_OK" \
+            formal/dp_foundation/artifacts/python-run.log
+          grep -F "1 2 1 0" \
+            formal/dp_foundation/artifacts/python-run.log
+          grep -F "7 12 2" \
+            formal/dp_foundation/artifacts/python-run.log
+
+      - name: Record generated-code checksums
+        run: |
+          set -euxo pipefail
+          find formal/dp_foundation/artifacts/dp_foundation-py \
+            -type f -print0 | sort -z | xargs -0 sha256sum \
+            > formal/dp_foundation/artifacts/generated-sha256.txt
+
+      - name: Upload proof and generated Python
+        uses: actions/upload-artifact@v4
+        with:
+          name: dafny-dp-foundation
+          path: |
+            formal/dp_foundation/FoundationPilot.dfy
+            formal/dp_foundation/README.md
+            formal/dp_foundation/artifacts/
+          if-no-files-found: error
