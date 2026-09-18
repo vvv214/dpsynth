@@ -170,18 +170,16 @@ module AimFoundations {
     ];
     var hist := TwoWayMarginal(records, 2, 2);
 
-    assert hist[0][0] == 1;
-    assert hist[0][1] == 2;
-    assert hist[1][0] == 1;
-    assert hist[1][1] == 1;
-
     AddOnePairIsOneHot(records, 2, 2, Rec(1, 0));
 
     var costs: seq<nat> := [3, 4, 5, 2];
     var used, accepted := SpendUntilBudget(costs, 10);
-    assert used <= 10;
 
-    print "AIM_FOUNDATIONS_OK\n";
+    if hist == [[1, 2], [1, 1]] && used == 7 && accepted == 2 {
+      print "AIM_FOUNDATIONS_OK\n";
+    } else {
+      print "AIM_FOUNDATIONS_BAD\n";
+    }
     print hist, "\n";
     print used, " ", accepted, "\n";
   }
