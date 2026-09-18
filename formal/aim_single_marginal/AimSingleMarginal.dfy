@@ -6,7 +6,7 @@ module AimSingleMarginal {
     forall i: nat :: i < |cells| ==> cells[i] < k
   }
 
-  function Count(cells: seq<nat>, target: nat): nat
+  function Count(cells: seq<nat>, target: int): nat
     decreases |cells|
   {
     if |cells| == 0 then 0
@@ -20,7 +20,7 @@ module AimSingleMarginal {
     seq(k, j => Count(cells, j))
   }
 
-  lemma CountAppend(cells: seq<nat>, x: nat, target: nat)
+  lemma CountAppend(cells: seq<nat>, x: nat, target: int)
     ensures Count(cells + [x], target) ==
       Count(cells, target) + (if x == target then 1 else 0)
   {
@@ -64,6 +64,9 @@ module AimSingleMarginal {
       hist := next;
       i := i + 1;
     }
+
+    assert i == |cells|;
+    assert cells[..i] == cells;
   }
 
   lemma AddOneIsOneHot(cells: seq<nat>, k: nat, x: nat)
@@ -88,14 +91,13 @@ module AimSingleMarginal {
     var cells: seq<nat> := [0, 2, 2, 1, 2];
     var hist := Marginal(cells, 3);
 
-    assert |hist| == 3;
-    assert hist[0] == 1;
-    assert hist[1] == 1;
-    assert hist[2] == 3;
-
     AddOneIsOneHot(cells, 3, 1);
 
-    print "AIM_MARGINAL_OK\n";
+    if hist == [1, 1, 3] {
+      print "AIM_MARGINAL_OK\n";
+    } else {
+      print "AIM_MARGINAL_BAD\n";
+    }
     print hist, "\n";
   }
 }
