@@ -23,16 +23,23 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p formal/aim_foundations/artifacts
+          mkdir -p formal/aim_array_kernel/artifacts
           dafny --version | tee formal/aim_foundations/artifacts/dafny-version.txt
           python3 --version 2>&1 | tee formal/aim_foundations/artifacts/python-version.txt
 
-      - name: Verify Dafny proof
+      - name: Verify sequence-based foundations
         run: |
           set -o pipefail
           dafny verify formal/aim_foundations/AimFoundations.dfy \
             | tee formal/aim_foundations/artifacts/verify.log
 
-      - name: Translate verified program to Python
+      - name: Verify mutable array kernel
+        run: |
+          set -o pipefail
+          dafny verify formal/aim_array_kernel/AimArrayKernel.dfy \
+            | tee formal/aim_array_kernel/artifacts/verify.log
+
+      - name: Translate verified programs to Python
         run: |
           set -euxo pipefail
           dafny translate py \
@@ -40,9 +47,11 @@ jobs:
             --output=formal/aim_foundations/artifacts/aim_foundations \
             --include-runtime \
             | tee formal/aim_foundations/artifacts/translate.log
-          find formal/aim_foundations/artifacts/aim_foundations-py \
-            -maxdepth 3 -type f -print | sort \
-            | tee formal/aim_foundations/artifacts/generated-files.txt
+          dafny translate py \
+            formal/aim_array_kernel/AimArrayKernel.dfy \
+            --output=formal/aim_array_kernel/artifacts/aim_array_kernel \
+            --include-runtime \
+            | tee formal/aim_array_kernel/artifacts/translate.log
 
       - name: Execute generated Python
         run: |
@@ -56,19 +65,28 @@ jobs:
           grep -F "7 2" \
             formal/aim_foundations/artifacts/python-run.log
 
+          python3 formal/aim_array_kernel/artifacts/aim_array_kernel-py/ \
+            | tee formal/aim_array_kernel/artifacts/python-run.log
+          grep -F "AIM_ARRAY_OK" \
+            formal/aim_array_kernel/artifacts/python-run.log
+          grep -F "1 2 1 1" \
+            formal/aim_array_kernel/artifacts/python-run.log
+
       - name: Record generated-code checksums
         run: |
           set -euxo pipefail
           find formal/aim_foundations/artifacts/aim_foundations-py \
             -type f -print0 | sort -z | xargs -0 sha256sum \
             > formal/aim_foundations/artifacts/generated-sha256.txt
+          find formal/aim_array_kernel/artifacts/aim_array_kernel-py \
+            -type f -print0 | sort -z | xargs -0 sha256sum \
+            > formal/aim_array_kernel/artifacts/generated-sha256.txt
 
-      - name: Upload proof and generated Python
+      - name: Upload proofs and generated Python
         uses: actions/upload-artifact@v4
         with:
           name: dafny-aim-foundations
           path: |
-            formal/aim_foundations/AimFoundations.dfy
-            formal/aim_foundations/README.md
-            formal/aim_foundations/artifacts/
+            formal/aim_foundations/
+            formal/aim_array_kernel/
           if-no-files-found: error
