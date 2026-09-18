@@ -14,3 +14,5 @@ It verifies:
 The Gaussian mechanism and the zCDP composition theorem remain trusted theorem interfaces. This pilot verifies the deterministic query, its sensitivity input, and the implementation of the budget ledger.
 
 The GitHub workflow verifies the Dafny file, translates it to Python, executes the generated Python, and archives all outputs.
+
+Verified end to end with Dafny 4.11.0 on the `experiment/dafny-dp-foundation` branch.
