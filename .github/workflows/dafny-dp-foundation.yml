@@ -6,9 +6,6 @@ on:
       - experiment/dafny-dp-foundation
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   verify-translate-run:
     runs-on: ubuntu-22.04
@@ -21,9 +18,6 @@ jobs:
         uses: dafny-lang/setup-dafny-action@v1
         with:
           dafny-version: "4.11.0"
-
-      - name: Apply staged proof fixes
-        run: python3 formal/dp_foundation/apply_fix.py
 
       - name: Record tool versions
         run: |
@@ -78,14 +72,3 @@ jobs:
             formal/dp_foundation/README.md
             formal/dp_foundation/artifacts/
           if-no-files-found: error
-
-      - name: Persist verified source
-        run: |
-          set -euxo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add formal/dp_foundation/FoundationPilot.dfy
-          if ! git diff --cached --quiet; then
-            git commit -m "Apply verified Dafny foundation fixes"
-            git push origin HEAD:experiment/dafny-dp-foundation
-          fi
