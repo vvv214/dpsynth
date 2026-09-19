@@ -11,16 +11,28 @@ permissions:
 jobs:
   verify-translate-run:
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: dafny-lang/setup-dafny-action@v1
         with: {dafny-version: "4.11.0"}
-      - name: Verify all sources, translate, execute, reject negative cases
+      - name: Install pinned OpenDP backend
+        run: python3 -m pip install -r formal/dp_foundation/requirements-backend.txt
+      - name: Verify, translate, exercise real backend, and record contract scope
         run: bash formal/dp_foundation/run.sh
+      - name: Record source revision and installed versions
+        if: always()
+        run: |
+          mkdir -p formal/dp_foundation/artifacts
+          git rev-parse HEAD > formal/dp_foundation/artifacts/commit.txt
+          python3 -m pip freeze > formal/dp_foundation/artifacts/python-packages.txt
       - name: Archive sources and evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dafny-flat-user-pipeline
+          name: dafny-opendp-release
           path: formal/dp_foundation/
           if-no-files-found: error

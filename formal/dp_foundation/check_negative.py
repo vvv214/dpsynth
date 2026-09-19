@@ -8,13 +8,14 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parent
 DAFNY = os.environ.get('DAFNY', 'dafny')
-SOURCES = ('FoundationPilot.dfy','FlatGrouping.dfy','GaussianGate.dfy')
+SOURCES = ('FoundationPilot.dfy','FlatGrouping.dfy','GaussianGate.dfy','NumericBoundary.dfy')
 CASES = {
+  'bypass_integer_saturation': ('GaussianGate.dfy','var safeCenter := NB.Saturate(r.center);','var safeCenter := r.center;'),
   'bypass_clipping': ('FlatGrouping.dfy','rows:=rows+ClipRows(db[i].rows,cap);','rows:=rows+db[i].rows;'),
   'omit_budget_charge': ('GaussianGate.dfy','      used := next;','      used := used;'),
   'underestimate_sensitivity': ('GaussianGate.dfy','Rat(r.cap*r.cap*r.varianceDen,2*r.varianceNum)','Rat(r.cap*r.varianceDen,2*r.varianceNum)'),
 }
-FILTERS = {'bypass_clipping':'FlatGrouping.FlatMarginal',
+FILTERS = {'bypass_integer_saturation':'GaussianGate.Budget.Release','bypass_clipping':'FlatGrouping.FlatMarginal',
            'omit_budget_charge':'GaussianGate.Budget.Release',
            'underestimate_sensitivity':'GaussianGate.Build'}
 CLIENTS = {

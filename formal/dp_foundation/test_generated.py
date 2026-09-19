@@ -86,8 +86,8 @@ def main():
     assert frac(GG.default__.Cost(request))==Fraction(1,2)
     original=backend.default__.Sample
     calls=[]
-    def recording(center,vn,vd):
-        calls.append((list(center),vn,vd))
+    def recording(center,cap,vn,vd):
+        calls.append((list(center),cap,vn,vd))
         return _dafny.Seq([_dafny.BigRational(x)+_dafny.BigRational(1,4) for x in center])
     backend.default__.Sample=staticmethod(recording)
     session=GG.default__.NewBudget(PC.Rat_Rat(3,4))
@@ -95,7 +95,7 @@ def main():
     assert ok and len(answer)==4 and frac(session.Used())==Fraction(1,2)
     ok,answer=session.Release(request)
     assert not ok and list(answer)==[] and frac(session.Used())==Fraction(1,2)
-    assert calls==[([1,2,1,0],4,1)]
+    assert calls==[([1,2,1,0],2,4,1)]
     result['ffi_call_count_after_accept_then_reject']=len(calls)
     result['used_after_accept_then_reject']=str(frac(session.Used()))
 
@@ -122,7 +122,7 @@ def main():
     demo=GG.default__.NewBudget(PC.Rat_Rat(3,4))
     ok,noise=demo.Release(request)
     assert ok and len(noise)==4
-    result['demo_gaussian_smoke']='passed; NOT sampler certification'
+    result['opendp_gaussian_smoke']='passed with OpenDP 0.15.1; backend trusted, not re-proved'
     # Exercise the iterative executable path beyond Python's default stack depth.
     big=[(i%30,i%2,(i//2)%2) for i in range(3000)]
     start=time.perf_counter()

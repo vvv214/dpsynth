@@ -1,4 +1,5 @@
 include "FlatGrouping.dfy"
+include "NumericBoundary.dfy"
 
 module FlatInput {
   import opened DataModel
@@ -125,13 +126,16 @@ module RationalSemantics {
 }
 
 module GaussianGate {
-  // EXTERNAL ASSUMPTION: a chosen backend implements Gaussian release with the
-  // supplied exact integer center and rational variance, fresh randomness, and
-  // no extra observable outputs. Dafny below checks shape, NOT probability laws.
+  // EXTERNAL ASSUMPTION: the pinned OpenDP discrete-Gaussian backend has
+  // zCDP cost <= cap^2 * varianceDen / (2 * varianceNum) at L2 sensitivity cap.
+  // It may increase the scale for conservative floating-point calibration.
+  // Fresh randomness and no extra observable outputs are trusted. Dafny checks
+  // finite integer input range and output shape, NOT the probability law.
   module {:extern "trusted_gaussian"} GaussianBackend {
-    method {:extern} {:axiom} Sample(center:seq<nat>, varianceNum:nat, varianceDen:nat)
+    method {:extern} {:axiom} Sample(center:seq<nat>, cap:nat, varianceNum:nat, varianceDen:nat)
       returns (output:seq<real>)
       requires varianceNum > 0 && varianceDen > 0
+      requires forall i:int :: 0<=i<|center| ==> center[i]<=9223372036854775807
       ensures |output| == |center|
   }
   
@@ -141,6 +145,7 @@ module GaussianGate {
   import opened FlatGrouping
   import opened FlatInput
   import opened PrivacyCost
+  import NB = NumericBoundary
   import Backend = GaussianBackend
   import opened RationalSemantics
 
@@ -158,7 +163,9 @@ module GaussianGate {
     forall rs:seq<Flat>, u:nat :: ValidFlat(rs,a,b) ==>
       FlatQuery(rs,cap,a,b) == VecAdd(FlatQuery(Without(rs,u),cap,a,b),
         Histogram(ClipRows(Select(rs,u),cap),a,b)) &&
-      SumSquares(Histogram(ClipRows(Select(rs,u),cap),a,b)) <= cap*cap
+      SumSquares(Histogram(ClipRows(Select(rs,u),cap),a,b)) <= cap*cap &&
+      NB.DistanceSquared(NB.Clamped(FlatQuery(rs,cap,a,b),NB.I64Max),
+        NB.Clamped(FlatQuery(Without(rs,u),cap,a,b),NB.I64Max))<=cap*cap
   }
 
   lemma CertifyFamily(cap:nat,a:nat,b:nat)
@@ -168,8 +175,14 @@ module GaussianGate {
     forall rs:seq<Flat>, u:nat | ValidFlat(rs,a,b)
       ensures FlatQuery(rs,cap,a,b) == VecAdd(FlatQuery(Without(rs,u),cap,a,b),
         Histogram(ClipRows(Select(rs,u),cap),a,b)) &&
-        SumSquares(Histogram(ClipRows(Select(rs,u),cap),a,b)) <= cap*cap
-    { FlatUserSensitivity(rs,u,cap,a,b); }
+        SumSquares(Histogram(ClipRows(Select(rs,u),cap),a,b)) <= cap*cap &&
+      NB.DistanceSquared(NB.Clamped(FlatQuery(rs,cap,a,b),NB.I64Max),
+        NB.Clamped(FlatQuery(Without(rs,u),cap,a,b),NB.I64Max))<=cap*cap
+    {
+      FlatUserSensitivity(rs,u,cap,a,b);
+      NB.SaturatedDeltaBound(FlatQuery(Without(rs,u),cap,a,b),
+        Histogram(ClipRows(Select(rs,u),cap),a,b),NB.I64Max);
+    }
   }
 
   ghost predicate ValidRequest(r:Request) {
@@ -258,7 +271,8 @@ module GaussianGate {
       ok := LeRat(next,limit);
       if !ok { output := []; return; }
       used := next;
-      output := Backend.Sample(r.center,r.varianceNum,r.varianceDen);
+      var safeCenter := NB.Saturate(r.center);
+      output := Backend.Sample(safeCenter,r.cap,r.varianceNum,r.varianceDen);
     }
   }
 
