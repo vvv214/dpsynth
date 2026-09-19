@@ -1,0 +1,23 @@
+name: Dafny OpenDP bootstrap
+on:
+  push:
+    branches: [experiment/dafny-dp-foundation]
+    paths: [.github/workflows/dafny-opendp-bootstrap.yml]
+permissions:
+  contents: read
+jobs:
+  wheels:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Download pinned backend and dependencies
+        run: |
+          python -m pip download --only-binary=:all: --dest wheels 'opendp==0.15.1'
+          sha256sum wheels/* > wheels/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opendp-0.15.1-wheels-py313
+          path: wheels/
+          retention-days: 7
